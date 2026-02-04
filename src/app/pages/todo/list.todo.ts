@@ -5,13 +5,12 @@ import { StatefulWidget } from "mftsccs-browser";
 import { getLocalUserId } from "../user/login.service";
 
 export class list extends StatefulWidget{
-    todos: any;
-    inpage: number= 10;
+    todos: any = [];
+    inpage: number = 10;
     page: number = 1;
-    linker: string = "console_folder_s";
 
     before_render(): void {
-        let userId: number = getLocalUserId();
+        const userId: number = getLocalUserId();
         GetCompositionListListener("the_todo", userId, this.inpage, this.page, NORMAL).subscribe((output: any)=>{
             this.todos = output;
             this.render();
@@ -19,96 +18,81 @@ export class list extends StatefulWidget{
     }
 
     after_render() {
-        let tableElement = this.getElementById("mainbody");
-        if(tableElement){
-            if(this.todos.length > 0){
-                for(let i= 0; i< this.todos.length; i++){
-                    let id = this.todos[i].the_todo?.id;
+        console.log("Rendering task list...");
+        const tableElement = this.getElementById("mainbody");
+        if (!tableElement) return;
 
-                    if(id){
-                        let row = document.createElement("tr");
-                        let col1 = document.createElement("td");
-                        let col2 = document.createElement("td");
-                        let col3 = document.createElement("td");
-                        let col4 = document.createElement("td");
-                        let col5 = document.createElement("td");
-                        let col6 = document.createElement("td");
-                        
-                        let title = document.createElement("span");
-                        let titleValue = this.todos[i].the_todo.title
-                        title.innerHTML = titleValue;
-                        let description = document.createElement("span");
-                        let descriptionValue = this.todos[i].the_todo.description
-                        description.innerHTML = descriptionValue;
-                        let status = document.createElement("span");
-                        let statusValue = this.todos[i].the_todo.status;
-                        status.innerHTML = statusValue;
-                                        
-                        let del = document.createElement("button");
-                        del.setAttribute('class', 'btn btn-primary');
-                        del.setAttribute('padding', "10px");
-                        del.id = this.todos[i].the_todo.id;
-                        del.innerHTML = "Delete";
-                        del.onclick = () =>{
-                            if(id){
-                                DeleteConceptById(id).then(()=>{
-                                    console.log("Task deleted:", id);
-                                    this.before_render();
-                                });
-                            }
-                        }
+        tableElement.innerHTML = ""; // Clear previous rows
 
-                        let edit = document.createElement("button");
-                        edit.setAttribute('class', 'btn btn-primary');
-                        edit.setAttribute('padding', "10px");
-                        edit.id = this.todos[i].the_todo.id;
-                        edit.innerHTML = "edit";
-                        edit.onclick = () =>{
-                            this.data = {
-                                "id": edit.id,
-                                "title": titleValue,
-                                "description": descriptionValue
-                            }                            
-                            this.notify();
-                        }
+        for (const taskWrapper of this.todos) {
+            const task = taskWrapper.the_todo;
+            if (!task?.id) continue;
 
-                        let changestatus = document.createElement("button");
-                        changestatus.setAttribute('class', 'btn btn-primary');
-                        changestatus.setAttribute('padding', "10px");
-                        changestatus.id = this.todos[i].the_todo.id;
-                        changestatus.innerHTML = "change status";
-                        changestatus.onclick = () =>{
-                            let newStatus = statusValue === "pending" ? "completed" : "pending";
+            const row = document.createElement("tr");
 
-                            let patcher = new PatcherStructure();
-                            patcher.compositionId = id;
-                            patcher.patchObject = {
-                                status: newStatus
-                            };
+            // Cells
+            const titleCell = document.createElement("td");
+            const descriptionCell = document.createElement("td");
+            const statusCell = document.createElement("td");
+            const delCell = document.createElement("td");
+            const editCell = document.createElement("td");
+            const statusButtonCell = document.createElement("td");
 
-                            UpdateComposition(patcher).then(() => {
-                                console.log(`Status updated to "${newStatus}" successfully for task ID: ${id}`);
-                            });
-                        }
+            titleCell.textContent = task.title;
+            descriptionCell.textContent = task.description;
+            statusCell.textContent = task.status;
 
-                        col1.append(title);
-                        col2.append(description);
-                        col3.append(status);
-                        col4.append(del);
-                        col5.append(edit);
-                        col6.append(changestatus);
-                
-                        row.appendChild(col1);
-                        row.appendChild(col2);
-                        row.appendChild(col3);
-                        row.appendChild(col4);
-                        row.appendChild(col5);
-                        row.appendChild(col6);
-                        tableElement.append(row);
-                    }
+            // Buttons
+            const deleteButton = this.createButton("Delete", async () => {
+                try {
+                    await DeleteConceptById(task.id);
+                    console.log("Task deleted:", task.id);
+                    this.before_render();
+                } catch (error) {
+                    console.error("Failed to delete task:", error);
                 }
-            }
+            });
+
+            const editButton = this.createButton("Edit", () => {
+                this.data = { id: task.id, title: task.title, description: task.description };
+                this.notify();
+            });
+
+            const toggleStatusButton = this.createButton("Toggle Status", async () => {
+                const newStatus = task.status === "pending" ? "completed" : "pending";
+                console.log(`Changing status for task ID: ${task.id} from ${task.status} → ${newStatus}`);
+                try {
+                    const patcher = new PatcherStructure();
+                    patcher.compositionId = Number(task.id);
+                    patcher.patchObject = { status: newStatus };
+                    await UpdateComposition(patcher);
+                    console.log("Status updated successfully");
+                    this.before_render();
+                } catch (error) {
+                    console.error("Failed to update status:", error);
+                }
+            });
+
+            // Append buttons to cells
+            delCell.appendChild(deleteButton);
+            editCell.appendChild(editButton);
+            statusButtonCell.appendChild(toggleStatusButton);
+
+            // Append cells to row
+            row.append(titleCell, descriptionCell, statusCell, delCell, editCell, statusButtonCell);
+
+            // Append row to table
+            tableElement.appendChild(row);
         }
+    }
+
+    /** Helper to create buttons consistently */
+    private createButton(label: string, onClick: () => void): HTMLButtonElement {
+        const btn = document.createElement("button");
+        btn.classList.add("btn", "btn-primary");
+        btn.textContent = label;
+        btn.onclick = onClick;
+        return btn;
     }
 
     getHtml(): string {

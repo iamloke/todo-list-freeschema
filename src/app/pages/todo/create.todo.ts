@@ -10,64 +10,83 @@ export class create extends StatefulWidget{
     }
 
     after_render(): void {
-        let userId: number = getLocalUserId();
-        let order: number = 1;
-        let title = this.getElementById("title") as HTMLInputElement;
-        let description = this.getElementById("description") as HTMLInputElement;
-        let id = this.getElementById("id") as HTMLInputElement;
+        const userId: number = getLocalUserId();
+        const order: number = 1;
+        const titleInput = this.getElementById("title") as HTMLInputElement;
+        const descriptionInput = this.getElementById("description") as HTMLInputElement;
+        const idInput = this.getElementById("id") as HTMLInputElement;
         
         if(this.data){
-            console.log("Editing existing task:", this.data);
-            title.value = this.data.title;
-            description.value = this.data.description;
-            id.value = this.data.id;
+            titleInput.value = this.data.title;
+            descriptionInput.value = this.data.description;
+            idInput.value = this.data.id;
         }
         
-        let submitButton = this.getElementById("submit");
-        
+        const submitButton = this.getElementById("submit");
         if(submitButton){
-            submitButton.onclick = (ev: Event) => {
+            submitButton.onclick = async (ev: Event) => {
                 ev.preventDefault();
+
+                const titleValue = titleInput.value.trim();
+                const descriptionValue = descriptionInput.value.trim();
+                const taskId = idInput.value;
+
+                if (!titleValue) {
+                    console.warn("Title is empty, cannot create/update task");
+                    return;
+                }
     
-                if(id.value){
-                    console.log("Updating task with ID:", id.value);
-                    let patcherStructure: PatcherStructure = new PatcherStructure();
-                    patcherStructure.compositionId = Number(id.value);
-                    patcherStructure.patchObject = {
-                        "title": title.value,
-                        "description": description.value,
-                    }
-                    UpdateComposition(patcherStructure).then(() => {
+                try {
+                    if (taskId) {
+                        console.log("Updating task ID:", taskId);
+                        const patcher: PatcherStructure = new PatcherStructure();
+                        patcher.compositionId = Number(taskId);
+                        patcher.patchObject = {
+                            title: titleValue,
+                            description: descriptionValue
+                        };
+                        await UpdateComposition(patcher);
                         console.log("Task updated successfully");
-                    });
-                } else{
-                    console.log("Creating new task...");
-                    MakeTheInstanceConceptLocal("the_todo", "", true,userId,PRIVATE).then((mainconcept)=> {
-                        MakeTheInstanceConceptLocal("title", title.value,false, userId, PRIVATE).then((title_concept)=>{
-                            MakeTheInstanceConceptLocal("description", description.value, false, userId, PRIVATE).then((desc_concept) => {
-                                MakeTheInstanceConceptLocal("status", "pending", false, userId, PRIVATE).then((status_concept) => {
-                                    CreateTheConnectionLocal(mainconcept.id, title_concept.id, mainconcept.id, order, "", userId).then(()=>{
-                                        CreateTheConnectionLocal(mainconcept.id, desc_concept.id, mainconcept.id, order, "", userId).then(()=>{
-                                            CreateTheConnectionLocal(mainconcept.id, status_concept.id, mainconcept.id, order, "", userId).then(()=>{
-                                                LocalSyncData.SyncDataOnline().then(() => {
-                                                    console.log("Data synced successfully");
-                                                });
-                                            })
-                                        })
-                                    })
-                                });
-                            });
-                        });
-                    });
+                    } else {
+                        await this.createNewTask(userId, titleValue, descriptionValue, order);
+                    }
+                } catch (error) {
+                    console.error("Error creating/updating task:", error);
                 }
             }
         }
-
     }
 
-    /**
-     * @returns returns a form that takes in title and description for the todo item.
+    /** 
+     * Creates a new todo task and connects title, description, and status concepts
      */
+    private async createNewTask(userId: number, titleValue: string, descriptionValue: string, order: number) {
+        console.log("Creating new task...");
+
+        try {
+            const mainConcept = await MakeTheInstanceConceptLocal("the_todo", "", true, userId, PRIVATE);
+            const titleConcept = await MakeTheInstanceConceptLocal("title", titleValue, false, userId, PRIVATE);
+            const descriptionConcept = await MakeTheInstanceConceptLocal("description", descriptionValue, false, userId, PRIVATE);
+            const statusConcept = await MakeTheInstanceConceptLocal("status", "pending", false, userId, PRIVATE);
+
+            console.log("Concepts created:", {
+                mainConceptId: mainConcept.id,
+                titleConceptId: titleConcept.id,
+                descriptionConceptId: descriptionConcept.id,
+                statusConceptId: statusConcept.id
+            });
+
+            await CreateTheConnectionLocal(mainConcept.id, titleConcept.id, mainConcept.id, order, "", userId);
+            await CreateTheConnectionLocal(mainConcept.id, descriptionConcept.id, mainConcept.id, order, "", userId);
+            await CreateTheConnectionLocal(mainConcept.id, statusConcept.id, mainConcept.id, order, "", userId);
+
+            await LocalSyncData.SyncDataOnline();
+            console.log("Task created and synced successfully");
+        } catch (error) {
+            console.error("Failed to create new task:", error);
+        }
+    }
+
     getHtml(): string {
         let html = "";
         html =
